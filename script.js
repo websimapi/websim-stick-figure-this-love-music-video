@@ -5,6 +5,54 @@ let imageURLs = [];
 let currentLyricIndex = 0;
 let playerReady = false;
 let generatedImagesCount = 0;
+let room;
+
+// Initialize WebsimSocket for database storage
+document.addEventListener('DOMContentLoaded', async () => {
+    room = new WebsimSocket();
+    await initializeApp();
+});
+
+async function initializeApp() {
+    // Check if images are already in the database
+    const existingImages = await room.collection('lyric_images').getList();
+    
+    if (existingImages && existingImages.length === config.lyrics.length) {
+        // If we already have all images, use them
+        imageURLs = existingImages.map(img => img.imageUrl);
+        generatedImagesCount = imageURLs.length;
+        displayExistingImages(existingImages);
+    } else {
+        // Otherwise generate new images
+        await generateImagesForLyrics();
+    }
+    
+    // Load YouTube API
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+}
+
+function displayExistingImages(images) {
+    const progressBar = document.getElementById('progress-bar');
+    const statusText = document.getElementById('status');
+    const generatedImagesContainer = document.getElementById('generated-images');
+    
+    images.forEach((image, i) => {
+        const img = document.createElement('img');
+        img.src = image.imageUrl;
+        img.classList.add('generated-image');
+        img.alt = config.lyrics[i].text;
+        img.title = config.lyrics[i].text;
+        generatedImagesContainer.appendChild(img);
+    });
+    
+    progressBar.style.width = '100%';
+    statusText.textContent = "All images loaded from database! Click start to begin the video.";
+    document.getElementById('start-button').style.display = 'inline-block';
+    checkIfReady();
+}
 
 // Initialize the YouTube API
 window.onYouTubeIframeAPIReady = function() {
@@ -90,18 +138,39 @@ async function generateImagesForLyrics() {
         statusText.textContent = `Generating image ${i + 1}/${config.lyrics.length}: "${lyric.text}"`;
         
         try {
-            // Generate image for the lyric
-            const result = await websim.imageGen({
-                prompt: `${lyric.text} - artistic interpretation, music visual, stick figure style`,
-                aspect_ratio: "16:9"
-            });
+            // Check if this specific lyric image already exists in database
+            const existingImage = (await room.collection('lyric_images')
+                .filter({ lyricTime: lyric.time, lyricText: lyric.text })
+                .getList())[0];
+                
+            let imageUrl;
             
-            imageURLs[i] = result.url;
+            if (existingImage) {
+                // Use existing image from database
+                imageUrl = existingImage.imageUrl;
+            } else {
+                // Generate new image for the lyric
+                const result = await websim.imageGen({
+                    prompt: `${lyric.text} - artistic interpretation, music visual, stick figure style`,
+                    aspect_ratio: "16:9"
+                });
+                
+                imageUrl = result.url;
+                
+                // Store in database
+                await room.collection('lyric_images').create({
+                    lyricTime: lyric.time,
+                    lyricText: lyric.text,
+                    imageUrl: imageUrl
+                });
+            }
+            
+            imageURLs[i] = imageUrl;
             generatedImagesCount++;
             
-            // Display the generated image in the loading screen
+            // Display the generated/loaded image in the loading screen
             const img = document.createElement('img');
-            img.src = result.url;
+            img.src = imageUrl;
             img.classList.add('generated-image');
             img.alt = lyric.text;
             img.title = lyric.text;
@@ -112,7 +181,7 @@ async function generateImagesForLyrics() {
             progressBar.style.width = `${progressPercentage}%`;
             
             // Add a delay before generating the next image to avoid rate limiting
-            if (i < config.lyrics.length - 1) {
+            if (i < config.lyrics.length - 1 && !existingImage) {
                 await new Promise(resolve => setTimeout(resolve, config.imageGenerationDelay));
             }
         } catch (error) {
@@ -120,6 +189,17 @@ async function generateImagesForLyrics() {
             // Use fallback for this lyric
             imageURLs[i] = getFallbackImage(lyric.text);
             generatedImagesCount++;
+            
+            // Try to store fallback in database too
+            try {
+                await room.collection('lyric_images').create({
+                    lyricTime: lyric.time,
+                    lyricText: lyric.text,
+                    imageUrl: imageURLs[i]
+                });
+            } catch (dbError) {
+                console.error("Failed to save fallback to database:", dbError);
+            }
             
             // Display the fallback image in the loading screen
             const img = document.createElement('img');
@@ -199,25 +279,49 @@ function startExperience() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('video-container').style.display = 'block';
     
-    // Put player in fullscreen and start playing
-    if (player) {
-        const iframe = document.getElementById('video-container');
-        if (iframe.requestFullscreen) {
-            iframe.requestFullscreen();
-        } else if (iframe.webkitRequestFullscreen) {
-            iframe.webkitRequestFullscreen();
-        } else if (iframe.mozRequestFullScreen) {
-            iframe.mozRequestFullScreen();
-        } else if (iframe.msRequestFullscreen) {
-            iframe.msRequestFullscreen();
-        }
-        
+    // Start playing the video
+    if (player && player.playVideo) {
         player.playVideo();
+        
+        // Try to go fullscreen
+        const videoContainer = document.getElementById('video-container');
+        if (videoContainer.requestFullscreen) {
+            videoContainer.requestFullscreen().catch(err => {
+                console.warn("Couldn't enter fullscreen:", err);
+            });
+        } else if (videoContainer.webkitRequestFullscreen) {
+            videoContainer.webkitRequestFullscreen();
+        } else if (videoContainer.mozRequestFullScreen) {
+            videoContainer.mozRequestFullScreen();
+        } else if (videoContainer.msRequestFullscreen) {
+            videoContainer.msRequestFullscreen();
+        }
+    } else {
+        console.error("Player not ready:", player);
+        // Fallback if player isn't ready yet
+        window.onYouTubeIframeAPIReady = function() {
+            // Reinitialize player and start immediately
+            player = new YT.Player('youtube-player', {
+                height: '100%',
+                width: '100%',
+                videoId: config.videoId,
+                playerVars: {
+                    'autoplay': 1,
+                    'controls': 0,
+                    'showinfo': 0,
+                    'rel': 0,
+                    'iv_load_policy': 3,
+                    'fs': 1,
+                    'playsinline': 1
+                },
+                events: {
+                    'onReady': (e) => e.target.playVideo(),
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        };
     }
 }
-
-// Start the image generation process when the page loads
-document.addEventListener('DOMContentLoaded', generateImagesForLyrics);
 
 // Fallback handlers for CORS issues
 async function fetchWithCorsProxy(url) {
