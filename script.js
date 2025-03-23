@@ -283,6 +283,11 @@ function startExperience() {
     if (player && player.playVideo) {
         player.playVideo();
         
+        // Start the interval for checking time
+        if (!window.timeCheckInterval) {
+            window.timeCheckInterval = setInterval(checkTimeAndShowImages, 500);
+        }
+        
         // Try to go fullscreen
         const videoContainer = document.getElementById('video-container');
         if (videoContainer.requestFullscreen) {
