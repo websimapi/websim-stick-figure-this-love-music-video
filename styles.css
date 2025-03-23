@@ -92,6 +92,49 @@ body {
     animation: fadeInAndFall 8s ease-in forwards;
 }
 
+#generated-images {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 20px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+}
+
+.generated-image {
+    width: 150px;
+    height: auto;
+    border-radius: 5px;
+    transition: transform 0.2s;
+}
+
+.generated-image:hover {
+    transform: scale(1.1);
+}
+
+#start-button {
+    margin-top: 20px;
+    padding: 12px 30px;
+    background: linear-gradient(90deg, #3498db, #2ecc71);
+    border: none;
+    border-radius: 30px;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: none;
+}
+
+#start-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(46, 204, 113, 0.5);
+}
+
 @keyframes fadeInAndFall {
     0% {
         transform: translateY(-50px) scale(0) rotate(-10deg);
@@ -109,4 +152,3 @@ body {
         opacity: 0;
     }
 }
-

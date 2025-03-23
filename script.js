@@ -30,7 +30,7 @@ window.onYouTubeIframeAPIReady = function() {
 
 function onPlayerReady(event) {
     playerReady = true;
-    // Don't start the player yet, we'll do that after generating images
+    // Don't start the player yet, we'll wait for user to click start button
     checkIfReady();
 }
 
@@ -83,6 +83,7 @@ function showImage(imageUrl) {
 async function generateImagesForLyrics() {
     const progressBar = document.getElementById('progress-bar');
     const statusText = document.getElementById('status');
+    const generatedImagesContainer = document.getElementById('generated-images');
     
     for (let i = 0; i < config.lyrics.length; i++) {
         const lyric = config.lyrics[i];
@@ -98,6 +99,14 @@ async function generateImagesForLyrics() {
             imageURLs[i] = result.url;
             generatedImagesCount++;
             
+            // Display the generated image in the loading screen
+            const img = document.createElement('img');
+            img.src = result.url;
+            img.classList.add('generated-image');
+            img.alt = lyric.text;
+            img.title = lyric.text;
+            generatedImagesContainer.appendChild(img);
+            
             // Update progress bar
             const progressPercentage = (generatedImagesCount / config.lyrics.length) * 100;
             progressBar.style.width = `${progressPercentage}%`;
@@ -112,6 +121,14 @@ async function generateImagesForLyrics() {
             imageURLs[i] = getFallbackImage(lyric.text);
             generatedImagesCount++;
             
+            // Display the fallback image in the loading screen
+            const img = document.createElement('img');
+            img.src = imageURLs[i];
+            img.classList.add('generated-image');
+            img.alt = lyric.text;
+            img.title = lyric.text;
+            generatedImagesContainer.appendChild(img);
+            
             // Update progress bar even on error
             const progressPercentage = (generatedImagesCount / config.lyrics.length) * 100;
             progressBar.style.width = `${progressPercentage}%`;
@@ -122,7 +139,8 @@ async function generateImagesForLyrics() {
         }
     }
     
-    statusText.textContent = "All images generated! Starting video...";
+    statusText.textContent = "All images generated! Click start to begin the video.";
+    document.getElementById('start-button').style.display = 'inline-block';
     checkIfReady();
 }
 
@@ -169,7 +187,10 @@ function getFallbackImage(text) {
 function checkIfReady() {
     // Check if both player is ready and all images have been generated
     if (playerReady && generatedImagesCount === config.lyrics.length) {
-        startExperience();
+        // Show the start button instead of automatically starting
+        const startButton = document.getElementById('start-button');
+        startButton.style.display = 'inline-block';
+        startButton.addEventListener('click', startExperience);
     }
 }
 
@@ -180,7 +201,7 @@ function startExperience() {
     
     // Put player in fullscreen and start playing
     if (player) {
-        const iframe = player.getIframe();
+        const iframe = document.getElementById('video-container');
         if (iframe.requestFullscreen) {
             iframe.requestFullscreen();
         } else if (iframe.webkitRequestFullscreen) {
@@ -225,4 +246,3 @@ async function fetchWithCorsProxy(url) {
     
     throw new Error("All CORS proxies failed");
 }
-
